@@ -3,10 +3,14 @@
 Screen Capture Overlay Module for selecting screen regions
 """
 import sys
+import os
+import time
 import pyautogui
+import subprocess
+from PIL import Image
 from PyQt6.QtWidgets import QWidget, QApplication
-from PyQt6.QtGui import QPainter, QPen, QColor, QGuiApplication
-from PyQt6.QtCore import Qt, QPoint, QRect, QTimer
+from PyQt6.QtGui import QPainter, QPen, QColor, QGuiApplication, QScreen
+from PyQt6.QtCore import Qt, QPoint, QRect, QTimer, QSize
 
 class ScreenCaptureOverlay(QWidget):
     """Transparent overlay for selecting screen regions to capture"""
@@ -21,50 +25,113 @@ class ScreenCaptureOverlay(QWidget):
         self.is_capturing = False
         self.status_text = "Click and drag to select a region. Press ESC to cancel."
         
+        # For macOS, we need to handle screen capture differently
+        self.is_macos = sys.platform == "darwin"
+        
         # Configure widget for capture
-        self.setWindowFlags(
-            Qt.WindowType.FramelessWindowHint | 
-            Qt.WindowType.WindowStaysOnTopHint |
-            Qt.WindowType.BypassWindowManagerHint |  # Add this to ensure it covers everything
-            Qt.WindowType.Tool  # Add this for better handling on macOS
-        )
+        # Important: For macOS we need different flags than for other platforms
+        if self.is_macos:
+            self.setWindowFlags(
+                Qt.WindowType.FramelessWindowHint | 
+                Qt.WindowType.WindowStaysOnTopHint |
+                Qt.WindowType.Tool  # macOS-specific flag
+            )
+        else:
+            self.setWindowFlags(
+                Qt.WindowType.FramelessWindowHint | 
+                Qt.WindowType.WindowStaysOnTopHint |
+                Qt.WindowType.BypassWindowManagerHint
+            )
+            
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         
-        # To make sure we're capturing the entire screen on macOS 
-        # Get screen information for all available screens
-        desktop = QApplication.desktop() if hasattr(QApplication, 'desktop') else QGuiApplication.primaryScreen()
-        total_geometry = desktop.geometry() if hasattr(desktop, 'geometry') else desktop.availableGeometry()
-        self.screen_geometry = total_geometry
+        # Get information about all available screens
+        self.screens = QGuiApplication.screens()
+        self.screen_geometries = []
+        self.total_geometry = QRect()
+        
+        # Find combined geometry of all screens
+        for screen in self.screens:
+            geometry = screen.geometry()
+            self.screen_geometries.append(geometry)
+            self.total_geometry = self.total_geometry.united(geometry)
+        
+        self.screen_geometry = self.total_geometry
+        print(f"Total detected screen geometry: {self.total_geometry.width()}x{self.total_geometry.height()}")
+        
+        # Store background screenshot for macOS workaround
+        self.background_image = None
     
     def start_capture(self):
         """Begin the screen capture process"""
-        # Configure the window for full-screen capture
-        self.setWindowFlags(
-            Qt.WindowType.FramelessWindowHint | 
-            Qt.WindowType.WindowStaysOnTopHint |
-            Qt.WindowType.BypassWindowManagerHint |
-            Qt.WindowType.Tool
-        )
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        # Take a full-screen screenshot BEFORE showing our overlay
+        # This is crucial so we can see the actual screen content
+        try:
+            print("Taking full screenshot of all screens...")
+            # Use different approach for macOS
+            if self.is_macos:
+                # On macOS, we'll take a screenshot before showing our overlay
+                self.background_image = self.take_full_screenshot()
+                if self.background_image:
+                    print(f"Background image captured: {self.background_image.width}x{self.background_image.height}")
+                else:
+                    print("Failed to capture background image")
+                    self.parent_app.on_capture_complete(None)
+                    return
+            else:
+                # For other platforms this approach should work
+                self.background_image = pyautogui.screenshot()
+        except Exception as e:
+            print(f"Error capturing background: {e}")
+            self.parent_app.show()
+            self.parent_app.on_capture_complete(None)
+            return
         
-        # Update screen geometry in case monitor setup changed
-        desktop = QApplication.desktop() if hasattr(QApplication, 'desktop') else QGuiApplication.primaryScreen()
-        total_geometry = desktop.geometry() if hasattr(desktop, 'geometry') else desktop.availableGeometry()
-        self.screen_geometry = total_geometry
+        # Update screen information in case setup changed
+        self.screens = QGuiApplication.screens()
+        self.screen_geometries = []
+        self.total_geometry = QRect()
         
-        # Set geometry to cover all screens
-        self.setGeometry(self.screen_geometry)
+        # Find combined geometry of all screens
+        for screen in self.screens:
+            geometry = screen.geometry()
+            self.screen_geometries.append(geometry)
+            self.total_geometry = self.total_geometry.united(geometry)
         
-        # Enable mouse tracking
-        self.setMouseTracking(True)
+        self.screen_geometry = self.total_geometry
+        print(f"Updated screen geometry: {self.screen_geometry.width()}x{self.screen_geometry.height()}")
         
         # Reset selection points
         self.start_point = QPoint()
         self.end_point = QPoint()
         self.is_capturing = False
         
-        # Show overlay as fullscreen
-        self.showFullScreen()
+        # Prepare window
+        if self.is_macos:
+            # For macOS, we need special handling
+            self.setWindowFlags(
+                Qt.WindowType.FramelessWindowHint | 
+                Qt.WindowType.WindowStaysOnTopHint |
+                Qt.WindowType.Tool
+            )
+        else:
+            self.setWindowFlags(
+                Qt.WindowType.FramelessWindowHint | 
+                Qt.WindowType.WindowStaysOnTopHint |
+                Qt.WindowType.BypassWindowManagerHint
+            )
+        
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setGeometry(self.screen_geometry)
+        self.setMouseTracking(True)
+        
+        # Show the overlay
+        if self.is_macos:
+            # On macOS, avoid showFullScreen as it can capture only itself
+            self.show()
+        else:
+            self.showFullScreen()
+        
         self.raise_()
         self.activateWindow()
         self.setCursor(Qt.CursorShape.CrossCursor)
@@ -75,6 +142,39 @@ class ScreenCaptureOverlay(QWidget):
         # Force the window to be active and on top
         self.activateWindow()
         self.raise_()
+    
+    def take_full_screenshot(self):
+        """Take a full screenshot of all screens using macOS native command"""
+        try:
+            # Create a temporary file
+            temp_file = f"/tmp/screenshot_temp_{int(time.time())}.png"
+            
+            # Use macOS native screencapture command
+            result = subprocess.run(['screencapture', '-x', temp_file], 
+                                 capture_output=True, text=True, check=False)
+            
+            if result.returncode != 0:
+                print(f"screencapture failed: {result.stderr}")
+                return None
+                
+            # Check if file exists
+            if not os.path.exists(temp_file):
+                print(f"Screenshot file not created: {temp_file}")
+                return None
+                
+            # Open the image file
+            img = Image.open(temp_file)
+            
+            # Clean up the temp file
+            try:
+                os.remove(temp_file)
+            except:
+                pass
+                
+            return img
+        except Exception as e:
+            print(f"Error taking full screenshot: {e}")
+            return None
     
     def paintEvent(self, event):
         """Handle paint events to draw selection rectangle"""
@@ -184,12 +284,13 @@ class ScreenCaptureOverlay(QWidget):
             self.parent_app.on_capture_complete(None)
     
     def take_screenshot(self):
-        """Capture the selected region of the screen"""
-        # Get the normalized rectangle coordinates
+        """Capture the selected region of the screen using the pre-captured background image"""
+        # Get the normalized rectangle coordinates in widget space
         rect = QRect(self.start_point, self.end_point).normalized()
         
         # Ensure we have a valid selection
         if rect.width() < 10 or rect.height() < 10:
+            print("Selection too small")
             self.parent_app.on_capture_complete(None)
             return
         
@@ -198,71 +299,69 @@ class ScreenCaptureOverlay(QWidget):
         self.update()
         QApplication.processEvents()  # Make sure update is visible
         
-        # Hide this window to avoid capturing it in the screenshot
+        # We need to hide the overlay
         self.hide()
         QApplication.processEvents()  # Ensure window is hidden
         
-        # Process events a bit longer to ensure window hiding completes
-        QTimer.singleShot(200, lambda: self._take_delayed_screenshot(rect))
-    
-    def _take_delayed_screenshot(self, rect):
-        """Take the screenshot after a short delay to ensure window is hidden"""
-        try:
-            # Convert widget coordinates to global screen coordinates
+        # Use the background image we already captured
+        if self.background_image:
+            # Convert widget coordinates to screen coordinates
             start_global = self.mapToGlobal(rect.topLeft())
             end_global = self.mapToGlobal(rect.bottomRight())
             
-            # Recalculate the rectangle with global coordinates
             global_rect = QRect(start_global, end_global).normalized()
             global_x = global_rect.x()
             global_y = global_rect.y()
             global_width = global_rect.width()
             global_height = global_rect.height()
             
-            # Take the screenshot
-            screenshot = None
+            print(f"Cropping from background image: x={global_x}, y={global_y}, width={global_width}, height={global_height}")
             
-            # Debug print to help diagnose issues
-            print(f"Taking screenshot of region: x={global_x}, y={global_y}, width={global_width}, height={global_height}")
-            
-            # Try a direct screenshot first with slightly longer delay
-            # This is critical for macOS which needs more time
-            QTimer.singleShot(300, lambda: self._execute_screenshot(global_x, global_y, global_width, global_height))
-        except Exception as e:
-            print(f"Screenshot error: {str(e)}")
-            self.parent_app.show()
-            self.parent_app.on_capture_complete(None)
-            
-    def _execute_screenshot(self, x, y, width, height):
-        """Actually execute the screenshot capture after all UI is hidden"""
-        try:
-            # Try direct screenshot
-            screenshot = None
             try:
-                screenshot = pyautogui.screenshot(region=(x, y, width, height))
+                # Create a cropped version from our background image
+                cropped = self.background_image.crop((
+                    global_x, 
+                    global_y, 
+                    global_x + global_width, 
+                    global_y + global_height
+                ))
+                
+                print(f"Crop successful: {cropped.width}x{cropped.height}")
+                # Send the cropped image to the parent
+                self.parent_app.on_capture_complete(cropped)
+                return
             except Exception as e:
-                print(f"Direct screenshot failed: {str(e)}")
-                # If direct screenshot fails, try full screenshot and crop
-                try:
-                    print("Trying full screenshot and crop")
-                    full_screenshot = pyautogui.screenshot()
-                    left = max(0, x)
-                    top = max(0, y)
-                    right = min(full_screenshot.width, left + width)
-                    bottom = min(full_screenshot.height, top + height)
-                    screenshot = full_screenshot.crop((left, top, right, bottom))
-                except Exception as e:
-                    print(f"Crop screenshot failed: {str(e)}")
+                print(f"Error cropping background image: {e}")
+        
+        # If we reach here, something went wrong with the background image approach
+        # Fall back to taking a fresh screenshot
+        print("Fallback to direct screenshot capture...")
+        self._take_direct_screenshot(global_x, global_y, global_width, global_height)
+    
+    def _take_direct_screenshot(self, x, y, width, height):
+        """Take a direct screenshot as a fallback method"""
+        try:
+            if self.is_macos:
+                # For macOS, try using the native screencapture command
+                temp_file = f"/tmp/screenshot_region_{int(time.time())}.png"
+                result = subprocess.run(['screencapture', '-x', '-R', f"{x},{y},{width},{height}", temp_file], 
+                                       capture_output=True, text=True, check=False)
+                
+                if result.returncode == 0 and os.path.exists(temp_file):
+                    img = Image.open(temp_file)
+                    try:
+                        os.remove(temp_file)
+                    except:
+                        pass
+                    self.parent_app.on_capture_complete(img)
+                    return
             
-            # Validate screenshot dimensions and handle possible errors
-            if screenshot is None or screenshot.width == 0 or screenshot.height == 0:
-                print("Screenshot has invalid dimensions or is None")
-                self.parent_app.on_capture_complete(None)
-            else:
-                print(f"Screenshot captured successfully: {screenshot.width}x{screenshot.height}")
-                # Send screenshot to parent
+            # Try pyautogui as a last resort
+            screenshot = pyautogui.screenshot(region=(x, y, width, height))
+            if screenshot and screenshot.width > 0 and screenshot.height > 0:
                 self.parent_app.on_capture_complete(screenshot)
+            else:
+                self.parent_app.on_capture_complete(None)
         except Exception as e:
-            print(f"Execute screenshot error: {str(e)}")
-            self.parent_app.show()
+            print(f"Direct screenshot error: {e}")
             self.parent_app.on_capture_complete(None)
