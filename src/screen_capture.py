@@ -1,0 +1,268 @@
+#!/usr/bin/env python3
+"""
+Screen Capture Overlay Module for selecting screen regions
+"""
+import sys
+import pyautogui
+from PyQt6.QtWidgets import QWidget, QApplication
+from PyQt6.QtGui import QPainter, QPen, QColor, QGuiApplication
+from PyQt6.QtCore import Qt, QPoint, QRect, QTimer
+
+class ScreenCaptureOverlay(QWidget):
+    """Transparent overlay for selecting screen regions to capture"""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.parent_app = parent
+        
+        # Initialize variables
+        self.start_point = QPoint()
+        self.end_point = QPoint()
+        self.is_capturing = False
+        self.status_text = "Click and drag to select a region. Press ESC to cancel."
+        
+        # Configure widget for capture
+        self.setWindowFlags(
+            Qt.WindowType.FramelessWindowHint | 
+            Qt.WindowType.WindowStaysOnTopHint |
+            Qt.WindowType.BypassWindowManagerHint |  # Add this to ensure it covers everything
+            Qt.WindowType.Tool  # Add this for better handling on macOS
+        )
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        
+        # To make sure we're capturing the entire screen on macOS 
+        # Get screen information for all available screens
+        desktop = QApplication.desktop() if hasattr(QApplication, 'desktop') else QGuiApplication.primaryScreen()
+        total_geometry = desktop.geometry() if hasattr(desktop, 'geometry') else desktop.availableGeometry()
+        self.screen_geometry = total_geometry
+    
+    def start_capture(self):
+        """Begin the screen capture process"""
+        # Configure the window for full-screen capture
+        self.setWindowFlags(
+            Qt.WindowType.FramelessWindowHint | 
+            Qt.WindowType.WindowStaysOnTopHint |
+            Qt.WindowType.BypassWindowManagerHint |
+            Qt.WindowType.Tool
+        )
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        
+        # Update screen geometry in case monitor setup changed
+        desktop = QApplication.desktop() if hasattr(QApplication, 'desktop') else QGuiApplication.primaryScreen()
+        total_geometry = desktop.geometry() if hasattr(desktop, 'geometry') else desktop.availableGeometry()
+        self.screen_geometry = total_geometry
+        
+        # Set geometry to cover all screens
+        self.setGeometry(self.screen_geometry)
+        
+        # Enable mouse tracking
+        self.setMouseTracking(True)
+        
+        # Reset selection points
+        self.start_point = QPoint()
+        self.end_point = QPoint()
+        self.is_capturing = False
+        
+        # Show overlay as fullscreen
+        self.showFullScreen()
+        self.raise_()
+        self.activateWindow()
+        self.setCursor(Qt.CursorShape.CrossCursor)
+        
+        # Process events to ensure window is shown properly
+        QApplication.processEvents()
+        
+        # Force the window to be active and on top
+        self.activateWindow()
+        self.raise_()
+    
+    def paintEvent(self, event):
+        """Handle paint events to draw selection rectangle"""
+        painter = QPainter(self)
+        
+        # Draw darker semi-transparent overlay (increased opacity to 150)
+        painter.fillRect(self.rect(), QColor(0, 0, 0, 150))
+        
+        # Draw instruction text at the top
+        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
+        font = painter.font()
+        font.setPointSize(16)  # Larger text
+        font.setBold(True)  # Make text bold
+        painter.setFont(font)
+        painter.setPen(QColor(255, 255, 255))
+        text_rect = self.rect()
+        text_rect.setHeight(70)  # Larger text area
+        painter.drawText(text_rect, Qt.AlignmentFlag.AlignCenter, self.status_text)
+        
+        # Draw selection rectangle if we're capturing
+        if self.is_capturing and not self.start_point.isNull() and not self.end_point.isNull():
+            selection_rect = QRect(self.start_point, self.end_point).normalized()
+            
+            # Clear the selected area to make it transparent
+            painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Clear)
+            painter.fillRect(selection_rect, Qt.GlobalColor.white)
+            
+            # Draw selection rectangle border with a more visible blue color
+            painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
+            pen = QPen(QColor(0, 174, 255), 3)  # Thicker border
+            painter.setPen(pen)
+            painter.drawRect(selection_rect)
+            
+            # Draw corner markers to make them more visible
+            corner_size = 6
+            corner_color = QColor(0, 174, 255)
+            
+            # Draw corner squares at each corner - using integers to avoid type errors
+            painter.fillRect(QRect(int(selection_rect.topLeft().x() - corner_size/2), 
+                                  int(selection_rect.topLeft().y() - corner_size/2), 
+                                  corner_size, corner_size), corner_color)
+            
+            painter.fillRect(QRect(int(selection_rect.topRight().x() - corner_size/2), 
+                                  int(selection_rect.topRight().y() - corner_size/2), 
+                                  corner_size, corner_size), corner_color)
+            
+            painter.fillRect(QRect(int(selection_rect.bottomLeft().x() - corner_size/2), 
+                                  int(selection_rect.bottomLeft().y() - corner_size/2), 
+                                  corner_size, corner_size), corner_color)
+            
+            painter.fillRect(QRect(int(selection_rect.bottomRight().x() - corner_size/2), 
+                                  int(selection_rect.bottomRight().y() - corner_size/2), 
+                                  corner_size, corner_size), corner_color)
+            
+            # Draw dimensions of selection
+            width = selection_rect.width()
+            height = selection_rect.height()
+            dimension_text = f"{width} × {height}"
+            
+            # Position the text at the bottom right of the selection
+            text_x = selection_rect.right() - 90
+            text_y = selection_rect.bottom() + 25
+            
+            # Create a background for the text
+            text_rect = QRect(text_x - 5, text_y - 20, 100, 30)
+            painter.fillRect(text_rect, QColor(0, 0, 0, 220))
+            
+            # Draw the text
+            painter.setPen(QColor(255, 255, 255))
+            font = painter.font()
+            font.setPointSize(12)
+            font.setBold(True)
+            painter.setFont(font)
+            painter.drawText(text_x, text_y, dimension_text)
+    
+    def mousePressEvent(self, event):
+        """Handle mouse press events to start selection"""
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.start_point = event.pos()
+            self.end_point = event.pos()
+            self.is_capturing = True
+            self.status_text = "Release mouse to capture"
+            self.update()
+    
+    def mouseMoveEvent(self, event):
+        """Handle mouse move events to update selection"""
+        if self.is_capturing:
+            self.end_point = event.pos()
+            self.update()
+    
+    def mouseReleaseEvent(self, event):
+        """Handle mouse release events to complete selection"""
+        if event.button() == Qt.MouseButton.LeftButton and self.is_capturing:
+            self.end_point = event.pos()
+            self.is_capturing = False
+            
+            # Take the screenshot
+            self.take_screenshot()
+            self.hide()
+    
+    def keyPressEvent(self, event):
+        """Handle key press events to cancel capture"""
+        if event.key() == Qt.Key.Key_Escape:
+            self.hide()
+            # Make sure to properly clean up
+            QApplication.processEvents()
+            self.parent_app.on_capture_complete(None)
+    
+    def take_screenshot(self):
+        """Capture the selected region of the screen"""
+        # Get the normalized rectangle coordinates
+        rect = QRect(self.start_point, self.end_point).normalized()
+        
+        # Ensure we have a valid selection
+        if rect.width() < 10 or rect.height() < 10:
+            self.parent_app.on_capture_complete(None)
+            return
+        
+        # Update status to provide feedback
+        self.status_text = "Processing screenshot..."
+        self.update()
+        QApplication.processEvents()  # Make sure update is visible
+        
+        # Hide this window to avoid capturing it in the screenshot
+        self.hide()
+        QApplication.processEvents()  # Ensure window is hidden
+        
+        # Process events a bit longer to ensure window hiding completes
+        QTimer.singleShot(200, lambda: self._take_delayed_screenshot(rect))
+    
+    def _take_delayed_screenshot(self, rect):
+        """Take the screenshot after a short delay to ensure window is hidden"""
+        try:
+            # Convert widget coordinates to global screen coordinates
+            start_global = self.mapToGlobal(rect.topLeft())
+            end_global = self.mapToGlobal(rect.bottomRight())
+            
+            # Recalculate the rectangle with global coordinates
+            global_rect = QRect(start_global, end_global).normalized()
+            global_x = global_rect.x()
+            global_y = global_rect.y()
+            global_width = global_rect.width()
+            global_height = global_rect.height()
+            
+            # Take the screenshot
+            screenshot = None
+            
+            # Debug print to help diagnose issues
+            print(f"Taking screenshot of region: x={global_x}, y={global_y}, width={global_width}, height={global_height}")
+            
+            # Try a direct screenshot first with slightly longer delay
+            # This is critical for macOS which needs more time
+            QTimer.singleShot(300, lambda: self._execute_screenshot(global_x, global_y, global_width, global_height))
+        except Exception as e:
+            print(f"Screenshot error: {str(e)}")
+            self.parent_app.show()
+            self.parent_app.on_capture_complete(None)
+            
+    def _execute_screenshot(self, x, y, width, height):
+        """Actually execute the screenshot capture after all UI is hidden"""
+        try:
+            # Try direct screenshot
+            screenshot = None
+            try:
+                screenshot = pyautogui.screenshot(region=(x, y, width, height))
+            except Exception as e:
+                print(f"Direct screenshot failed: {str(e)}")
+                # If direct screenshot fails, try full screenshot and crop
+                try:
+                    print("Trying full screenshot and crop")
+                    full_screenshot = pyautogui.screenshot()
+                    left = max(0, x)
+                    top = max(0, y)
+                    right = min(full_screenshot.width, left + width)
+                    bottom = min(full_screenshot.height, top + height)
+                    screenshot = full_screenshot.crop((left, top, right, bottom))
+                except Exception as e:
+                    print(f"Crop screenshot failed: {str(e)}")
+            
+            # Validate screenshot dimensions and handle possible errors
+            if screenshot is None or screenshot.width == 0 or screenshot.height == 0:
+                print("Screenshot has invalid dimensions or is None")
+                self.parent_app.on_capture_complete(None)
+            else:
+                print(f"Screenshot captured successfully: {screenshot.width}x{screenshot.height}")
+                # Send screenshot to parent
+                self.parent_app.on_capture_complete(screenshot)
+        except Exception as e:
+            print(f"Execute screenshot error: {str(e)}")
+            self.parent_app.show()
+            self.parent_app.on_capture_complete(None)

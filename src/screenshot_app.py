@@ -1,0 +1,134 @@
+#!/usr/bin/env python3
+"""
+Main Screenshot Application module
+"""
+from PyQt6.QtWidgets import (
+    QMainWindow, QPushButton, QVBoxLayout, QHBoxLayout, 
+    QWidget, QLabel, QApplication, QMessageBox
+)
+from PyQt6.QtGui import QKeySequence, QShortcut
+import sys
+import pyautogui
+from PyQt6.QtCore import Qt, QTimer
+from screen_capture import ScreenCaptureOverlay
+from annotation_window import AnnotationWindow
+
+class ScreenshotApp(QMainWindow):
+    """Main application window for the screenshot utility"""
+    
+    def __init__(self, shortcut_key="Ctrl+Shift+4"):
+        super().__init__()
+        self.shortcut_key = shortcut_key
+        self.setWindowTitle("Screenshot Utility")
+        self.setMinimumSize(300, 200)
+        self.statusBar().showMessage("Ready", 3000)
+        
+        # Setup UI
+        self.setup_ui()
+        
+        # Setup shortcuts
+        self.setup_shortcuts()
+        
+        # Initialize components
+        self.screen_capture = ScreenCaptureOverlay(self)
+        self.annotation_window = None
+        
+    def setup_ui(self):
+        """Set up the main window UI elements"""
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+        
+        main_layout = QVBoxLayout(central_widget)
+        
+        # Title label
+        title_label = QLabel("Screenshot Utility")
+        title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        main_layout.addWidget(title_label)
+        
+        # Capture button - update label to show current shortcut
+        shortcut_display = self.shortcut_key.replace("Ctrl", "⌘" if sys.platform == "darwin" else "Ctrl")
+        self.capture_button = QPushButton(f"Capture Screenshot ({shortcut_display})")
+        self.capture_button.clicked.connect(self.start_capture)
+        main_layout.addWidget(self.capture_button)
+        
+        # Button layout
+        button_layout = QHBoxLayout()
+        main_layout.addLayout(button_layout)
+        
+        # Help text
+        help_text = QLabel("Capture a region of your screen, annotate, and copy to clipboard.")
+        help_text.setWordWrap(True)
+        help_text.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        main_layout.addWidget(help_text)
+        
+    def setup_shortcuts(self):
+        """Set up keyboard shortcuts"""
+        # Use the configurable shortcut
+        self.capture_shortcut = QShortcut(QKeySequence(self.shortcut_key), self)
+        self.capture_shortcut.activated.connect(self.start_capture)
+        
+    def start_capture(self):
+        """Start the screen capture process"""
+        self.hide()  # Hide main window during capture
+        
+        # Use a slightly longer delay for multi-monitor setups
+        # This ensures the application is fully hidden before capture starts
+        QTimer.singleShot(300, self._delayed_capture)
+    
+    def _delayed_capture(self):
+        """Start capture after a delay to ensure main window is hidden"""
+        # Process any pending events to ensure window is fully hidden
+        QApplication.processEvents()
+        
+        try:
+            # For macOS, we might need to check permissions first
+            if sys.platform == "darwin":
+                # Try a small test screenshot to ensure permissions are granted
+                test_screenshot = pyautogui.screenshot(region=(0, 0, 1, 1))
+                if test_screenshot:
+                    print("Screenshot permissions appear to be granted")
+        except Exception as e:
+            print(f"Permission check failed: {e}")
+            # Show a message about permissions
+            QMessageBox.warning(
+                self, 
+                "Permission Required", 
+                "Please grant screen recording permission for this application in System Preferences > Security & Privacy > Privacy > Screen Recording"
+            )
+            self.show()
+            return
+            
+        # Initialize the screen capture window, which will now handle
+        # the multi-monitor setup correctly
+        self.screen_capture.start_capture()
+        
+    def on_capture_complete(self, screenshot):
+        """Handle completed screenshot capture"""
+        self.show()  # Show main window after capture
+        
+        if screenshot:
+            try:
+                self.annotation_window = AnnotationWindow(screenshot, self)
+                self.annotation_window.show()
+                
+                # Flash the button to indicate success
+                original_stylesheet = self.capture_button.styleSheet()
+                self.capture_button.setStyleSheet("background-color: #4CAF50; color: white;")
+                
+                # Use a single-shot timer to revert the style after a brief delay
+                QTimer.singleShot(500, lambda: self.capture_button.setStyleSheet(original_stylesheet))
+                
+            except Exception as e:
+                # If there's an error with annotation window
+                print(f"Error opening annotation window: {e}")
+                QMessageBox.warning(self, "Error", f"Failed to open screenshot: {str(e)}")
+        else:
+            # Indicate canceled or failed capture
+            self.statusBar().showMessage("Screenshot canceled or failed", 3000)
+        
+    def closeEvent(self, event):
+        """Handle window close event"""
+        # Clean up any resources
+        if self.annotation_window:
+            self.annotation_window.close()
+        event.accept()
