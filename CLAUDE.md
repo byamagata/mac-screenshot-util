@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Run application: `python src/main.py` or `python run.py`
 - Run tests: `pytest tests/`
 - Run single test: `pytest tests/test_screenshot_app.py::test_function_name -v`
-- Activate virtual environment: `source venv/bin/activate` (macOS/Linux)
+- Activate virtual environment: `source screenshot/bin/activate` (macOS/Linux)
 
 ## Code Style Guidelines
 
