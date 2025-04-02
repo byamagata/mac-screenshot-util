@@ -108,6 +108,29 @@ class ScreenshotApp(QMainWindow):
         
         if screenshot:
             try:
+                # Add debug info about the screenshot
+                print(f"Received screenshot for annotation: {type(screenshot)}")
+                if hasattr(screenshot, 'width') and hasattr(screenshot, 'height'):
+                    print(f"Screenshot dimensions: {screenshot.width}x{screenshot.height}")
+                elif hasattr(screenshot, 'size'):
+                    print(f"Screenshot size: {screenshot.size()}")
+                else:
+                    print("Screenshot has no readable dimensions")
+                    
+                # Ensure it's a PIL Image
+                from PIL import Image
+                if not isinstance(screenshot, Image.Image):
+                    print("Converting screenshot to PIL Image...")
+                    if hasattr(screenshot, 'toImage'):
+                        qimg = screenshot.toImage()
+                        # Convert QImage to PIL Image
+                        from PyQt6.QtGui import QImage
+                        buffer = qimg.bits().asstring(qimg.sizeInBytes())
+                        screenshot = Image.frombuffer("RGBA", (qimg.width(), qimg.height()), buffer, "raw", "RGBA", 0, 1)
+                    else:
+                        print("Cannot convert screenshot to PIL Image - unknown type")
+                
+                print(f"Creating annotation window with screenshot: {screenshot}")
                 self.annotation_window = AnnotationWindow(screenshot, self)
                 self.annotation_window.show()
                 
@@ -121,9 +144,16 @@ class ScreenshotApp(QMainWindow):
             except Exception as e:
                 # If there's an error with annotation window
                 print(f"Error opening annotation window: {e}")
+                import traceback
+                traceback.print_exc()
                 QMessageBox.warning(self, "Error", f"Failed to open screenshot: {str(e)}")
         else:
             # Indicate canceled or failed capture
+            print("\n=== SCREENSHOT FAILED OR CANCELED ===")
+            # Print a stack trace to show where the failure happened
+            import traceback
+            traceback.print_stack()
+            print("=== END OF ERROR TRACE ===\n")
             self.statusBar().showMessage("Screenshot canceled or failed", 3000)
         
     def closeEvent(self, event):

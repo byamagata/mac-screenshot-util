@@ -21,12 +21,44 @@ class DrawingArea(QWidget):
         super().__init__(parent)
         self.screenshot = screenshot
         
-        # Convert PIL Image to QPixmap
-        img = screenshot.convert("RGBA")
-        img_data = img.tobytes("raw", "RGBA")
-        qimg = QImage(img_data, img.width, img.height, QImage.Format.Format_RGBA8888)
-        self.pixmap = QPixmap.fromImage(qimg)
+        print(f"Drawing area initializing with screenshot type: {type(screenshot)}")
         
+        # Convert PIL Image to QPixmap
+        try:
+            # Ensure we have an RGB or RGBA mode image
+            if screenshot.mode not in ['RGB', 'RGBA']:
+                print(f"Converting image from {screenshot.mode} to RGBA")
+                img = screenshot.convert("RGBA")
+            else:
+                img = screenshot
+                
+            print(f"PIL Image size: {img.width}x{img.height}, mode: {img.mode}")
+            
+            # Get raw image data for conversion to QImage
+            img_data = img.tobytes("raw", "RGBA")
+            
+            # Create QImage with correct stride
+            qimg = QImage(img_data, img.width, img.height, img.width * 4, QImage.Format.Format_RGBA8888)
+            if qimg.isNull():
+                print("QImage is null after conversion")
+            else:
+                print(f"QImage created: {qimg.width()}x{qimg.height()}")
+                
+            # Convert to QPixmap for drawing
+            self.pixmap = QPixmap.fromImage(qimg)
+            if self.pixmap.isNull():
+                print("QPixmap is null after conversion from QImage")
+            else:
+                print(f"QPixmap created: {self.pixmap.width()}x{self.pixmap.height()}")
+        except Exception as e:
+            import traceback
+            print(f"Error converting screenshot to QPixmap: {e}")
+            traceback.print_exc()
+            # Create a fallback empty pixmap as a last resort
+            self.pixmap = QPixmap(400, 300)
+            self.pixmap.fill(QColor(255, 255, 255))
+            print("Created fallback empty pixmap")
+            
         # Initialize drawing properties
         self.last_point = QPoint()
         self.drawing = False
@@ -42,6 +74,7 @@ class DrawingArea(QWidget):
         self.history_index = 0
         
         # Set fixed size based on screenshot
+        print(f"Setting drawing area size to: {self.pixmap.width()}x{self.pixmap.height()}")
         self.setFixedSize(self.pixmap.size())
     
     def set_tool(self, tool):
