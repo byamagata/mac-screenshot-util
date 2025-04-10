@@ -1,4 +1,5 @@
 """
 Screenshot Utility Package
 """
-# Empty init file to mark directory as a package
+# Package version
+__version__ = "2.0.3"

@@ -10,8 +10,8 @@ from PyQt6.QtGui import QKeySequence, QShortcut
 import sys
 import pyautogui
 from PyQt6.QtCore import Qt, QTimer
-from screen_capture import ScreenCaptureOverlay
-from annotation_window import AnnotationWindow
+from src.screen_capture import ScreenCaptureOverlay
+from src.annotation_window import AnnotationWindow
 
 class ScreenshotApp(QMainWindow):
     """Main application window for the screenshot utility"""

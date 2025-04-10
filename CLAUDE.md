@@ -9,6 +9,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Run single test: `pytest tests/test_screenshot_app.py::test_function_name -v`
 - Activate virtual environment: `source screenshot/bin/activate` (macOS/Linux)
 
+## Version Control
+
+- Increment version number in `src/__init__.py` every time a change is made to the codebase
+
 ## Code Style Guidelines
 
 - **Imports**: Group imports by standard library, third-party, and local modules

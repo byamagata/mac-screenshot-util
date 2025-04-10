@@ -1,8 +1,14 @@
 from setuptools import setup, find_packages
+import sys
+import os
+
+# Add the project root to the path so we can import the version
+sys.path.insert(0, os.path.abspath('.'))
+from src import __version__
 
 setup(
     name="screenshot-util",
-    version="0.1.0",
+    version=__version__,
     packages=find_packages(),
     install_requires=[
         "pyqt6>=6.0.0",
