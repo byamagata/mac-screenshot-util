@@ -11,8 +11,8 @@ def main():
     """Main application entry point"""
     # Parse command line arguments
     parser = argparse.ArgumentParser(description='macOS Screenshot Utility')
-    parser.add_argument('--shortcut', default='Ctrl+Shift+5', 
-                        help='Keyboard shortcut for capturing screenshots (default: Ctrl+Shift+5)')
+    parser.add_argument('--shortcut', default='Ctrl+Shift+4', 
+                        help='Keyboard shortcut for capturing screenshots (default: Ctrl+Shift+4)')
     parser.add_argument('--service', action='store_true',
                         help='Run as background service with menu bar icon')
     args = parser.parse_args()

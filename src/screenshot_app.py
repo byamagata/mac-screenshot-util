@@ -16,7 +16,7 @@ from src.annotation_window import AnnotationWindow
 class ScreenshotApp(QMainWindow):
     """Main application window for the screenshot utility"""
     
-    def __init__(self, shortcut_key="Ctrl+Shift+4"):
+    def __init__(self, shortcut_key=None):
         super().__init__()
         self.shortcut_key = shortcut_key
         self.setWindowTitle("Screenshot Utility")
@@ -45,9 +45,12 @@ class ScreenshotApp(QMainWindow):
         title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         main_layout.addWidget(title_label)
         
-        # Capture button - update label to show current shortcut
-        shortcut_display = self.shortcut_key.replace("Ctrl", "⌘" if sys.platform == "darwin" else "Ctrl")
-        self.capture_button = QPushButton(f"Capture Screenshot ({shortcut_display})")
+        # Capture button - update label to show current shortcut if available
+        if self.shortcut_key:
+            shortcut_display = self.shortcut_key.replace("Ctrl", "⌘" if sys.platform == "darwin" else "Ctrl")
+            self.capture_button = QPushButton(f"Capture Screenshot ({shortcut_display})")
+        else:
+            self.capture_button = QPushButton("Capture Screenshot")
         self.capture_button.clicked.connect(self.start_capture)
         main_layout.addWidget(self.capture_button)
         
@@ -63,9 +66,10 @@ class ScreenshotApp(QMainWindow):
         
     def setup_shortcuts(self):
         """Set up keyboard shortcuts"""
-        # Use the configurable shortcut
-        self.capture_shortcut = QShortcut(QKeySequence(self.shortcut_key), self)
-        self.capture_shortcut.activated.connect(self.start_capture)
+        # Use the configurable shortcut if provided
+        if self.shortcut_key:
+            self.capture_shortcut = QShortcut(QKeySequence(self.shortcut_key), self)
+            self.capture_shortcut.activated.connect(self.start_capture)
         
     def start_capture(self):
         """Start the screen capture process"""

@@ -28,7 +28,7 @@ class HotkeyListener:
     
     def __init__(self, callback, preferences=None):
         self.callback = callback
-        self.preferences = preferences or DEFAULT_PREFERENCES
+        self.preferences = preferences or DEFAULT_PREFERENCES.copy()  # Use a copy to prevent shared references
         self.listener = None
         self.running = False
         self.hotkey = None
@@ -44,8 +44,12 @@ class HotkeyListener:
             
         self.running = True
         
-        # Get hotkey configuration from preferences
-        hotkey_config = self.preferences.get("hotkey", DEFAULT_PREFERENCES["hotkey"])
+        # Get hotkey configuration from preferences - make a deep copy
+        # to ensure we don't accidentally modify the original preferences
+        hotkey_config = self.preferences.get("hotkey", {}).copy()
+        if not hotkey_config:
+            hotkey_config = DEFAULT_PREFERENCES["hotkey"].copy()
+            
         hotkey_key = hotkey_config.get("key", "4")
         
         # Convert modifiers to pynput format
@@ -164,6 +168,11 @@ class ScreenshotUtilService(rumps.App):
         # Initialize preferences
         self.preferences_path = os.path.expanduser("~/.screenshot_util_preferences.json")
         self.preferences = self.load_preferences()
+        
+        # Make sure we have a properly formatted hotkey configuration
+        if "hotkey" not in self.preferences or not isinstance(self.preferences["hotkey"], dict):
+            self.preferences["hotkey"] = DEFAULT_PREFERENCES["hotkey"].copy()
+            self.save_preferences()
         
         # Create the QApplication instance for Qt components
         # This is needed for the screenshot capture overlay
@@ -309,46 +318,17 @@ class ScreenshotUtilService(rumps.App):
         # For now, we'll simply show a message about how to configure settings
         # In a production app, we would need to create a separate preferences app
         # that can communicate with the menu bar service
+        current_hotkey = self.preferences.get("hotkey", {"key": "4", "modifiers": ["command", "shift"]})
+        current_key = current_hotkey.get("key", "4")
+        current_modifiers = ", ".join([m.capitalize() for m in current_hotkey.get("modifiers", ["command", "shift"])])
+        
         rumps.alert(
             title="Preferences",
-            message="Preferences can be configured by editing ~/.screenshot_util_preferences.json\n\n"
-                   "Current hotkey: Command+Shift+4\n\n"
-                   "A dedicated preferences UI will be added in a future update.",
+            message=f"Preferences can be configured by editing ~/.screenshot_util_preferences.json\n\n"
+                   f"Current hotkey: {current_modifiers}+{current_key.upper()}\n\n"
+                   f"A dedicated preferences UI will be added in a future update.",
             ok="OK"
         )
-        
-        # The following is a simplistic implementation of toggling the hotkey
-        # between Command+Shift+4 and Command+Shift+5
-        try:
-            current_hotkey = self.preferences.get("hotkey", {"key": "4", "modifiers": ["command", "shift"]})
-            current_key = current_hotkey.get("key", "4")
-            
-            # Toggle between 4 and 5
-            new_key = "5" if current_key == "4" else "4"
-            
-            # Update preferences
-            self.preferences["hotkey"] = {
-                "key": new_key,
-                "modifiers": current_hotkey.get("modifiers", ["command", "shift"])
-            }
-            self.save_preferences()
-            
-            # Restart hotkey listener
-            self.hotkey_listener.stop()
-            self.hotkey_listener = HotkeyListener(self.take_screenshot, self.preferences)
-            self.hotkey_listener.start()
-            
-            # Show confirmation
-            rumps.notification(
-                title="Hotkey Changed",
-                subtitle="",
-                message=f"Screenshot hotkey changed to Command+Shift+{new_key}",
-                icon=None
-            )
-        except Exception as e:
-            print(f"Error changing hotkey: {e}")
-            import traceback
-            traceback.print_exc()
     
     def set_save_location(self, _):
         """Set the default save location for screenshots"""
