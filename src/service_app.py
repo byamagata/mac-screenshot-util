@@ -291,142 +291,49 @@ class ScreenshotUtilService(rumps.App):
     
     def open_hotkey_settings(self, _):
         """Open dialog to configure hotkeys"""
+        # For now, we'll simply show a message about how to configure settings
+        # In a production app, we would need to create a separate preferences app
+        # that can communicate with the menu bar service
+        rumps.alert(
+            title="Preferences",
+            message="Preferences can be configured by editing ~/.screenshot_util_preferences.json\n\n"
+                   "Current hotkey: Command+Shift+4\n\n"
+                   "A dedicated preferences UI will be added in a future update.",
+            ok="OK"
+        )
+        
+        # The following is a simplistic implementation of toggling the hotkey
+        # between Command+Shift+4 and Command+Shift+5
         try:
-            # Create a new subprocess to show the preferences dialog
-            # This avoids mixing the rumps main loop with PyQt
-            script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "preferences_dialog_runner.py")
+            current_hotkey = self.preferences.get("hotkey", {"key": "4", "modifiers": ["command", "shift"]})
+            current_key = current_hotkey.get("key", "4")
             
-            # Create the preferences dialog runner if it doesn't exist
-            if not os.path.exists(script_path):
-                with open(script_path, "w") as f:
-                    f.write("""#!/usr/bin/env python3
-import sys
-import os
-import json
-import importlib.util
-from PyQt6.QtWidgets import QApplication
-
-# Add the project root to the Python path
-script_dir = os.path.dirname(os.path.abspath(__file__))
-project_root = os.path.dirname(script_dir)
-sys.path.insert(0, project_root)
-
-# Import the preferences dialog 
-try:
-    from src.preferences_dialog import PreferencesDialog
-except ImportError:
-    from preferences_dialog import PreferencesDialog
-
-def main():
-    # Load preferences
-    preferences_path = os.path.expanduser("~/.screenshot_util_preferences.json")
-    preferences = {}
-    
-    try:
-        if os.path.exists(preferences_path):
-            with open(preferences_path, "r") as f:
-                preferences = json.load(f)
-    except Exception as e:
-        print(f"Error loading preferences: {e}")
-    
-    # Create Qt application
-    app = QApplication(sys.argv)
-    
-    # Create and show preferences dialog
-    dialog = PreferencesDialog(preferences=preferences)
-    result = dialog.exec()
-    
-    # Save preferences if dialog was accepted
-    if result == 1:  # QDialog::Accepted
-        new_preferences = dialog.get_preferences()
-        try:
-            with open(preferences_path, "w") as f:
-                json.dump(new_preferences, f, indent=4)
-            print("Preferences saved successfully")
-            print(json.dumps(new_preferences))
+            # Toggle between 4 and 5
+            new_key = "5" if current_key == "4" else "4"
+            
+            # Update preferences
+            self.preferences["hotkey"] = {
+                "key": new_key,
+                "modifiers": current_hotkey.get("modifiers", ["command", "shift"])
+            }
+            self.save_preferences()
+            
+            # Restart hotkey listener
+            self.hotkey_listener.stop()
+            self.hotkey_listener = HotkeyListener(self.take_screenshot, self.preferences)
+            self.hotkey_listener.start()
+            
+            # Show confirmation
+            rumps.notification(
+                title="Hotkey Changed",
+                subtitle="",
+                message=f"Screenshot hotkey changed to Command+Shift+{new_key}",
+                icon=None
+            )
         except Exception as e:
-            print(f"Error saving preferences: {e}")
-
-if __name__ == "__main__":
-    main()
-""")
-            
-            # Make the script executable
-            os.chmod(script_path, 0o755)
-            
-            # Run the preferences dialog in a separate process
-            process = subprocess.Popen([sys.executable, script_path], 
-                                     stdout=subprocess.PIPE, 
-                                     stderr=subprocess.PIPE)
-            
-            # Wait for the process to complete
-            stdout, stderr = process.communicate()
-            
-            # Check if preferences were updated
-            if process.returncode == 0 and b"Preferences saved successfully" in stdout:
-                print("Preferences updated, reloading...")
-                
-                # Reload preferences
-                old_preferences = self.preferences.copy()
-                self.preferences = self.load_preferences()
-                
-                # Check if hotkey changed
-                old_hotkey = old_preferences.get("hotkey", {"key": "4", "modifiers": ["command", "shift"]})
-                new_hotkey = self.preferences.get("hotkey", {"key": "4", "modifiers": ["command", "shift"]})
-                
-                if old_hotkey != new_hotkey:
-                    # Restart hotkey listener with new settings
-                    self.hotkey_listener.stop()
-                    self.hotkey_listener = HotkeyListener(self.take_screenshot, self.preferences)
-                    self.hotkey_listener.start()
-                    
-                    # Format the hotkey for display
-                    modifiers = '+'.join(m.capitalize() for m in new_hotkey.get("modifiers", []))
-                    key = new_hotkey.get("key", "").upper()
-                    hotkey_str = f"{modifiers}+{key}" if modifiers else key
-                    
-                    # Show confirmation
-                    rumps.notification(
-                        title="Hotkey Changed",
-                        subtitle="",
-                        message=f"Screenshot hotkey changed to {hotkey_str}",
-                        icon=None
-                    )
-                
-                # Update auto launch menu item text
-                auto_launch_status = "Enabled" if self.preferences.get("auto_launch", True) else "Disabled"
-                self.auto_launch_menu.title = f"Auto Launch: {auto_launch_status}"
-                
-                # Setup or remove launch agent based on auto_launch preference
-                if self.preferences.get("auto_launch", True):
-                    self.setup_launch_agent()
-                else:
-                    self.remove_launch_agent()
-            
-            # Check for errors
-            if stderr:
-                error_msg = stderr.decode('utf-8')
-                print(f"Error in preferences dialog: {error_msg}")
-                
-                # Show error notification
-                rumps.notification(
-                    title="Preferences Error",
-                    subtitle="",
-                    message="There was an error updating preferences",
-                    icon=None
-                )
-                
-        except Exception as e:
-            print(f"Error opening preferences dialog: {e}")
+            print(f"Error changing hotkey: {e}")
             import traceback
             traceback.print_exc()
-            
-            # Fallback to simple alert
-            rumps.alert(
-                title="Preferences Error",
-                message=f"Error opening preferences dialog: {str(e)}",
-                ok="OK"
-            )
     
     def set_save_location(self, _):
         """Set the default save location for screenshots"""
