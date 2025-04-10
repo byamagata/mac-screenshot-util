@@ -315,20 +315,85 @@ class ScreenshotUtilService(rumps.App):
     
     def open_hotkey_settings(self, _):
         """Open dialog to configure hotkeys"""
-        # For now, we'll simply show a message about how to configure settings
-        # In a production app, we would need to create a separate preferences app
-        # that can communicate with the menu bar service
-        current_hotkey = self.preferences.get("hotkey", {"key": "4", "modifiers": ["command", "shift"]})
-        current_key = current_hotkey.get("key", "4")
-        current_modifiers = ", ".join([m.capitalize() for m in current_hotkey.get("modifiers", ["command", "shift"])])
-        
-        rumps.alert(
-            title="Preferences",
-            message=f"Preferences can be configured by editing ~/.screenshot_util_preferences.json\n\n"
-                   f"Current hotkey: {current_modifiers}+{current_key.upper()}\n\n"
-                   f"A dedicated preferences UI will be added in a future update.",
-            ok="OK"
-        )
+        try:
+            # Create and launch a separate Python process to run the PyQt6 dialog
+            # This is needed because rumps (the menu bar app) and PyQt6 can't run in the same thread
+            import subprocess
+            import tempfile
+            import json
+            import os
+            
+            # Get current hotkey settings
+            current_hotkey = self.preferences.get("hotkey", {"key": "4", "modifiers": ["command", "shift"]})
+            
+            # Create a temporary file to store the updated hotkey settings
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.json', mode='w') as tmp:
+                tmp_path = tmp.name
+                # Write current settings to the temp file
+                json.dump(self.preferences, tmp)
+            
+            # Get path to the preferences dialog module
+            dialog_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "preferences_dialog.py")
+            
+            # Run the dialog script
+            print(f"Launching hotkey settings dialog with config: {tmp_path}")
+            result = subprocess.run([sys.executable, dialog_path, tmp_path], 
+                                  capture_output=True, text=True)
+            
+            # Check if the dialog was accepted (saved)
+            if result.returncode == 0:  # Success
+                print("Dialog accepted, updating preferences")
+                # Load updated preferences
+                with open(tmp_path, 'r') as f:
+                    updated_prefs = json.load(f)
+                
+                # Update our preferences
+                self.preferences["hotkey"] = updated_prefs["hotkey"]
+                self.save_preferences()
+                
+                # Restart hotkey listener
+                self.hotkey_listener.stop()
+                self.hotkey_listener = HotkeyListener(self.take_screenshot, self.preferences)
+                self.hotkey_listener.start()
+                
+                # Get the updated hotkey for the notification
+                hotkey = self.preferences["hotkey"]
+                key = hotkey.get("key", "4").upper()
+                modifiers = [m.capitalize() for m in hotkey.get("modifiers", [])]
+                
+                # Show confirmation in the menu bar app
+                rumps.notification(
+                    title="Hotkey Changed",
+                    subtitle="",
+                    message=f"Screenshot hotkey changed to {'+'.join(modifiers + [key])}",
+                    icon=None
+                )
+            else:
+                print("Dialog canceled or failed")
+                
+            # Clean up temporary files
+            try:
+                os.unlink(tmp_path)
+            except Exception as e:
+                print(f"Error cleaning up temporary files: {e}")
+                
+        except Exception as e:
+            print(f"Error opening hotkey settings dialog: {e}")
+            import traceback
+            traceback.print_exc()
+            
+            # Fallback to simple alert if there's an error
+            current_hotkey = self.preferences.get("hotkey", {"key": "4", "modifiers": ["command", "shift"]})
+            current_key = current_hotkey.get("key", "4")
+            current_modifiers = ", ".join([m.capitalize() for m in current_hotkey.get("modifiers", ["command", "shift"])])
+            
+            rumps.alert(
+                title="Preferences",
+                message=f"Error opening hotkey settings: {str(e)}\n\n"
+                       f"Current hotkey: {current_modifiers}+{current_key.upper()}\n\n"
+                       f"You can edit ~/.screenshot_util_preferences.json directly.",
+                ok="OK"
+            )
     
     def set_save_location(self, _):
         """Set the default save location for screenshots"""

@@ -1,131 +1,87 @@
 #!/usr/bin/env python3
 """
-Preferences Dialog Module for configuring Screenshot Utility
+Hotkey Settings Dialog for Screenshot Utility
 """
-import os
-import json
 import sys
+import json
+import re
+import os
 from PyQt6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
-    QPushButton, QComboBox, QCheckBox, QFileDialog, QGroupBox,
-    QFormLayout, QTabWidget, QWidget
+    QApplication, QDialog, QVBoxLayout, QHBoxLayout, QLabel,
+    QLineEdit, QPushButton, QCheckBox, QMessageBox, QFormLayout
 )
-from PyQt6.QtCore import Qt, QSettings
-from PyQt6.QtGui import QKeySequenceEdit
+from PyQt6.QtCore import Qt
 
-class PreferencesDialog(QDialog):
-    """Dialog for configuring Screenshot Utility preferences"""
-    
-    def __init__(self, parent=None, preferences=None):
-        super().__init__(parent)
-        self.preferences = preferences or {}
-        
-        self.setWindowTitle("Screenshot Utility Preferences")
+class HotkeyDialog(QDialog):
+    def __init__(self, config_path):
+        super().__init__()
+        self.config_path = config_path
+        self.setWindowTitle("Screenshot Hotkey Settings")
         self.setMinimumWidth(400)
+        self.setMinimumHeight(200)
+        
+        # Load settings
+        with open(config_path, 'r') as f:
+            self.preferences = json.load(f)
+        
+        hotkey_config = self.preferences.get("hotkey", {"key": "4", "modifiers": ["command", "shift"]})
         
         # Setup UI
-        self.setup_ui()
-        
-        # Load preferences to UI
-        self.load_preferences_to_ui()
-    
-    def setup_ui(self):
-        """Set up the preferences dialog UI"""
         layout = QVBoxLayout(self)
         
-        # Create tabs
-        tab_widget = QTabWidget()
-        layout.addWidget(tab_widget)
+        # Title
+        title_label = QLabel("Configure Screenshot Hotkey")
+        title_label.setStyleSheet("font-weight: bold; font-size: 14px;")
+        layout.addWidget(title_label)
         
-        # General tab
-        general_tab = QWidget()
-        general_layout = QVBoxLayout(general_tab)
-        tab_widget.addTab(general_tab, "General")
+        # Form layout for modifiers and key
+        form_layout = QFormLayout()
+        layout.addLayout(form_layout)
         
-        # Auto-launch settings
-        auto_launch_group = QGroupBox("Startup")
-        auto_launch_layout = QVBoxLayout(auto_launch_group)
-        self.auto_launch_checkbox = QCheckBox("Launch at system startup")
-        auto_launch_layout.addWidget(self.auto_launch_checkbox)
-        general_layout.addWidget(auto_launch_group)
-        
-        # Save location
-        save_group = QGroupBox("Save Settings")
-        save_layout = QHBoxLayout(save_group)
-        save_layout.addWidget(QLabel("Save Location:"))
-        self.save_location_edit = QLineEdit()
-        save_layout.addWidget(self.save_location_edit)
-        browse_button = QPushButton("Browse...")
-        browse_button.clicked.connect(self.browse_save_location)
-        save_layout.addWidget(browse_button)
-        general_layout.addWidget(save_group)
-        
-        # Hotkeys tab
-        hotkeys_tab = QWidget()
-        hotkeys_layout = QVBoxLayout(hotkeys_tab)
-        tab_widget.addTab(hotkeys_tab, "Hotkeys")
-        
-        # Screenshot hotkey
-        hotkeys_group = QGroupBox("Screenshot Hotkey")
-        hotkeys_form = QFormLayout(hotkeys_group)
-        
-        # For system-wide hotkey, we need to use modifiers + key format
-        hotkey_layout = QHBoxLayout()
-        
-        # Modifier checkboxes
-        self.command_checkbox = QCheckBox("Command (⌘)")
-        self.shift_checkbox = QCheckBox("Shift (⇧)")
-        self.control_checkbox = QCheckBox("Control (⌃)")
-        self.option_checkbox = QCheckBox("Option (⌥)")
-        
-        # Add checkboxes to layout
+        # Modifiers section
         modifiers_layout = QVBoxLayout()
-        modifiers_layout.addWidget(self.command_checkbox)
+        self.cmd_checkbox = QCheckBox("⌘ Command")
+        self.shift_checkbox = QCheckBox("⇧ Shift")
+        self.ctrl_checkbox = QCheckBox("⌃ Control")
+        self.option_checkbox = QCheckBox("⌥ Option")
+        
+        # Set current values
+        modifiers = hotkey_config.get("modifiers", [])
+        self.cmd_checkbox.setChecked("command" in modifiers)
+        self.shift_checkbox.setChecked("shift" in modifiers)
+        self.ctrl_checkbox.setChecked("control" in modifiers)
+        self.option_checkbox.setChecked("option" in modifiers)
+        
+        modifiers_layout.addWidget(self.cmd_checkbox)
         modifiers_layout.addWidget(self.shift_checkbox)
-        modifiers_layout.addWidget(self.control_checkbox)
+        modifiers_layout.addWidget(self.ctrl_checkbox)
         modifiers_layout.addWidget(self.option_checkbox)
         
-        hotkey_layout.addLayout(modifiers_layout)
+        form_layout.addRow("Modifiers:", modifiers_layout)
         
-        # Key dropdown
-        self.key_dropdown = QComboBox()
-        # Add common keys
-        for key in "1234567890abcdefghijklmnopqrstuvwxyz":
-            self.key_dropdown.addItem(key.upper(), key)
+        # Key input
+        key_layout = QHBoxLayout()
+        self.key_input = QLineEdit()
+        self.key_input.setMaxLength(3)  # Allow f10, f11, f12
+        self.key_input.setFixedWidth(50)
+        current_key = hotkey_config.get("key", "4")
+        self.key_input.setText(current_key)
         
-        # Add function keys
-        for i in range(1, 13):
-            self.key_dropdown.addItem(f"F{i}", f"f{i}")
+        key_layout.addWidget(self.key_input)
+        key_layout.addStretch(1)
         
-        hotkey_layout.addWidget(self.key_dropdown)
+        form_layout.addRow("Key:", key_layout)
         
-        hotkeys_form.addRow("Capture Hotkey:", hotkey_layout)
-        hotkeys_layout.addWidget(hotkeys_group)
+        # Help text
+        help_label = QLabel("Enter a single letter, number, or function key (e.g. 'a', '5', 'f1')")
+        help_label.setStyleSheet("color: #666;")
+        layout.addWidget(help_label)
         
-        # Annotation tab
-        annotation_tab = QWidget()
-        annotation_layout = QVBoxLayout(annotation_tab)
-        tab_widget.addTab(annotation_tab, "Annotation")
-        
-        # Default tool
-        tool_group = QGroupBox("Default Tool")
-        tool_layout = QVBoxLayout(tool_group)
-        self.tool_dropdown = QComboBox()
-        self.tool_dropdown.addItems(["Pen", "Line", "Arrow", "Rectangle"])
-        tool_layout.addWidget(self.tool_dropdown)
-        annotation_layout.addWidget(tool_group)
-        
-        # Default color (simplified for now)
-        color_group = QGroupBox("Default Color")
-        color_layout = QVBoxLayout(color_group)
-        self.color_dropdown = QComboBox()
-        self.color_dropdown.addItems(["Red", "Blue", "Green", "Yellow", "Black", "White"])
-        color_layout.addWidget(self.color_dropdown)
-        annotation_layout.addWidget(color_group)
-        
-        # Dialog buttons
+        # Button layout
         button_layout = QHBoxLayout()
         layout.addLayout(button_layout)
+        
+        button_layout.addStretch(1)
         
         # Cancel button
         cancel_button = QPushButton("Cancel")
@@ -134,99 +90,62 @@ class PreferencesDialog(QDialog):
         
         # Save button
         save_button = QPushButton("Save")
-        save_button.clicked.connect(self.accept)
+        save_button.clicked.connect(self.save_hotkey)
         button_layout.addWidget(save_button)
     
-    def load_preferences_to_ui(self):
-        """Load preferences data to UI elements"""
-        # Auto launch
-        self.auto_launch_checkbox.setChecked(self.preferences.get("auto_launch", True))
+    def save_hotkey(self):
+        # Get the key from the input
+        new_key = self.key_input.text().strip().lower()
         
-        # Save location
-        self.save_location_edit.setText(self.preferences.get("save_location", "~/Screenshots"))
+        # Validate key is a single character or f1-f12
+        if not (re.match(r'^[a-z0-9]$', new_key) or re.match(r'^f[1-9]$|^f1[0-2]$', new_key)):
+            QMessageBox.critical(self, "Invalid Key", 
+                               "Please enter a single letter, number, or function key (f1-f12)")
+            return
         
-        # Hotkey
-        hotkey_config = self.preferences.get("hotkey", {"key": "4", "modifiers": ["command", "shift"]})
-        
-        # Set modifiers
-        self.command_checkbox.setChecked("command" in hotkey_config.get("modifiers", []))
-        self.shift_checkbox.setChecked("shift" in hotkey_config.get("modifiers", []))
-        self.control_checkbox.setChecked("control" in hotkey_config.get("modifiers", []))
-        self.option_checkbox.setChecked("option" in hotkey_config.get("modifiers", []))
-        
-        # Set key
-        key = hotkey_config.get("key", "4")
-        index = self.key_dropdown.findData(key.lower())
-        if index >= 0:
-            self.key_dropdown.setCurrentIndex(index)
-        
-        # Default tool
-        tool_index = self.tool_dropdown.findText(self.preferences.get("default_tool", "Pen"))
-        if tool_index >= 0:
-            self.tool_dropdown.setCurrentIndex(tool_index)
-        
-        # Default color
-        color_index = self.color_dropdown.findText(self.preferences.get("default_color", "Red"))
-        if color_index >= 0:
-            self.color_dropdown.setCurrentIndex(color_index)
-    
-    def get_preferences(self):
-        """Get preferences from UI elements"""
-        # Create preferences dict
-        preferences = {}
-        
-        # Auto launch
-        preferences["auto_launch"] = self.auto_launch_checkbox.isChecked()
-        
-        # Save location
-        preferences["save_location"] = self.save_location_edit.text()
-        
-        # Hotkey
+        # Get modifiers
         modifiers = []
-        if self.command_checkbox.isChecked():
+        if self.cmd_checkbox.isChecked():
             modifiers.append("command")
         if self.shift_checkbox.isChecked():
             modifiers.append("shift")
-        if self.control_checkbox.isChecked():
+        if self.ctrl_checkbox.isChecked():
             modifiers.append("control")
         if self.option_checkbox.isChecked():
             modifiers.append("option")
         
-        key = self.key_dropdown.currentData()
-        preferences["hotkey"] = {
-            "key": key,
+        # Validate at least one modifier is selected
+        if not modifiers:
+            QMessageBox.critical(self, "Invalid Configuration", 
+                              "Please select at least one modifier key")
+            return
+        
+        # Update preferences
+        self.preferences["hotkey"] = {
+            "key": new_key,
             "modifiers": modifiers
         }
         
-        # Default tool
-        preferences["default_tool"] = self.tool_dropdown.currentText()
+        # Save preferences
+        with open(self.config_path, 'w') as f:
+            json.dump(self.preferences, f, indent=4)
         
-        # Default color
-        preferences["default_color"] = self.color_dropdown.currentText()
+        self.accept()
+
+def main():
+    """Run the hotkey settings dialog"""
+    if len(sys.argv) < 2:
+        print("Error: Config path not provided")
+        sys.exit(1)
         
-        return preferences
+    config_path = sys.argv[1]
     
-    def browse_save_location(self):
-        """Open folder browser to select save location"""
-        current_location = os.path.expanduser(self.save_location_edit.text())
-        
-        # Open directory dialog
-        directory = QFileDialog.getExistingDirectory(
-            self,
-            "Select Save Location",
-            current_location,
-            QFileDialog.Option.ShowDirsOnly | QFileDialog.Option.DontResolveSymlinks
-        )
-        
-        if directory:
-            # Convert to ~/path if in home directory
-            home = os.path.expanduser("~")
-            if directory.startswith(home):
-                directory = "~" + directory[len(home):]
-            
-            self.save_location_edit.setText(directory)
+    app = QApplication(sys.argv)
+    dialog = HotkeyDialog(config_path)
+    result = dialog.exec()
     
-    def accept(self):
-        """Save preferences when dialog is accepted"""
-        self.preferences = self.get_preferences()
-        super().accept()
+    # Return the result (1 for success, 0 for cancel)
+    sys.exit(0 if result else 1)
+
+if __name__ == "__main__":
+    main()
