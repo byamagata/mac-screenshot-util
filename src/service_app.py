@@ -139,7 +139,22 @@ class HotkeyListener:
 class ScreenshotUtilService(rumps.App):
     """Menu bar application for the screenshot utility service"""
     
+    # Class variable to track instances
+    _instance_running = False
+    
+    @classmethod
+    def is_instance_running(cls):
+        return cls._instance_running
+        
     def __init__(self):
+        # Check if another instance is already running
+        if ScreenshotUtilService._instance_running:
+            print("ERROR: Another instance of ScreenshotUtilService is already running!")
+            raise RuntimeError("Another instance of ScreenshotUtilService is already running!")
+            
+        # Mark as running
+        ScreenshotUtilService._instance_running = True
+            
         # Check if we have a custom icon, otherwise use emoji
         icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "menu_icon.png")
         icon = icon_path if os.path.exists(icon_path) else "📷"
@@ -538,7 +553,30 @@ class ScreenshotUtilService(rumps.App):
 def run_service():
     """Run the screenshot utility as a background service"""
     try:
-        print("Starting Screenshot Utility service...")
+        # Add a unique identifying string that we can use to detect this process later
+        print("Starting Screenshot Utility service with identifier: screenshot-service-instance")
+        
+        # Create an ID file to mark this as the active service
+        service_lock_path = os.path.expanduser("~/.screenshot_util_service.lock")
+        try:
+            # Write our PID to the lock file
+            with open(service_lock_path, "w") as f:
+                f.write(str(os.getpid()))
+                
+            # Make sure to clean up the lock file on exit
+            import atexit
+            def cleanup_lock():
+                try:
+                    if os.path.exists(service_lock_path):
+                        os.remove(service_lock_path)
+                except:
+                    pass
+            atexit.register(cleanup_lock)
+        except Exception as e:
+            print(f"Error creating lock file: {e}")
+            # Continue anyway
+            
+        # Start the service
         app = ScreenshotUtilService()
         app.run()
     except KeyboardInterrupt:
