@@ -522,7 +522,15 @@ class ScreenCaptureOverlay(QWidget):
         self._take_direct_screenshot(global_x, global_y, global_width, global_height)
     
     def take_pyqt_screenshot(self):
-        """Take a full screenshot using PyQt's native screen capture abilities"""
+        """Take a full screenshot using PyQt's native screen capture abilities.
+        
+        This method attempts to capture all screens using PyQt's screen capture
+        capabilities and combines them into a single PIL Image. If capturing
+        multiple screens fails, it falls back to capturing just the primary screen.
+        
+        Returns:
+            PIL.Image: The combined screenshot image of all screens, or None if capture fails
+        """
         try:
             print("Starting PyQt screenshot capture")
             # We'll capture each screen separately and then combine them
@@ -622,7 +630,24 @@ class ScreenCaptureOverlay(QWidget):
             return None
     
     def _take_direct_screenshot(self, x, y, width, height):
-        """Take a direct screenshot as a fallback method"""
+        """Take a direct screenshot of a specific region as a fallback method.
+        
+        Attempts multiple screenshot methods in order of preference:
+        1. macOS native screencapture command (if on macOS)
+        2. PyAutoGUI screenshot
+        3. Crop from existing background image
+        4. PyQt screenshot
+        
+        Args:
+            x: The x-coordinate of the region to capture
+            y: The y-coordinate of the region to capture
+            width: The width of the region to capture
+            height: The height of the region to capture
+            
+        Returns:
+            None. Instead, it passes the captured screenshot (or None if failed)
+            to the parent application via on_capture_complete.
+        """
         print(f"Taking direct screenshot of region: {x},{y},{width},{height}")
         
         # Try multiple methods to get the screenshot

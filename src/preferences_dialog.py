@@ -13,7 +13,19 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt
 
 class HotkeyDialog(QDialog):
+    """Dialog window for configuring screenshot hotkey settings.
+    
+    This dialog allows the user to set and save a custom hotkey combination
+    for triggering the screenshot tool, consisting of modifier keys 
+    (Command, Shift, Control, Option) and a single character key.
+    """
+    
     def __init__(self, config_path):
+        """Initialize the hotkey settings dialog.
+        
+        Args:
+            config_path: The path to the JSON preferences file
+        """
         super().__init__()
         self.config_path = config_path
         self.setWindowTitle("Screenshot Hotkey Settings")
@@ -94,6 +106,16 @@ class HotkeyDialog(QDialog):
         button_layout.addWidget(save_button)
     
     def save_hotkey(self):
+        """Save the hotkey configuration to the preferences file.
+        
+        Validates the user input for the key and modifier selections,
+        updates the preferences with the new hotkey configuration, and
+        writes the changes to the preferences file. Shows error messages
+        if validation fails.
+        
+        Returns:
+            None. Accepts the dialog if successful, otherwise remains open.
+        """
         # Get the key from the input
         new_key = self.key_input.text().strip().lower()
         

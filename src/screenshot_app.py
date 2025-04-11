@@ -80,7 +80,16 @@ class ScreenshotApp(QMainWindow):
         QTimer.singleShot(300, self._delayed_capture)
     
     def _delayed_capture(self):
-        """Start capture after a delay to ensure main window is hidden"""
+        """Start capture after a delay to ensure main window is hidden.
+        
+        This method is called after a short delay from start_capture to ensure
+        the main window is completely hidden before starting the capture process.
+        It checks for necessary permissions on macOS and initiates the screen
+        capture overlay.
+        
+        Returns:
+            None. Shows error message and main window if permission check fails.
+        """
         # Process any pending events to ensure window is fully hidden
         QApplication.processEvents()
         
@@ -161,7 +170,14 @@ class ScreenshotApp(QMainWindow):
             self.statusBar().showMessage("Screenshot canceled or failed", 3000)
         
     def closeEvent(self, event):
-        """Handle window close event"""
+        """Handle window close event.
+        
+        Ensures proper cleanup of resources when the main window is closed,
+        specifically closing any open annotation windows.
+        
+        Args:
+            event: The QCloseEvent triggered when closing the window
+        """
         # Clean up any resources
         if self.annotation_window:
             self.annotation_window.close()

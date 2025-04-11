@@ -263,7 +263,13 @@ class DrawingArea(QWidget):
         self.update()
     
     def _add_to_history(self):
-        """Add current state to history"""
+        """Add current state to history for undo/redo functionality.
+        
+        Updates the history list by:
+        1. Removing any forward history beyond the current index
+        2. Adding the current pixmap state to history
+        3. Limiting history size to maximum 20 items to conserve memory
+        """
         # Remove any forward history
         while len(self.history) > self.history_index + 1:
             self.history.pop()
@@ -422,7 +428,14 @@ class AnnotationWindow(QMainWindow):
             QMessageBox.information(self, "Success", f"Screenshot saved to {file_path}")
     
     def closeEvent(self, event):
-        """Handle window close event"""
+        """Handle window close event.
+        
+        Notifies the parent application that this window is being closed
+        and accepts the close event.
+        
+        Args:
+            event: The QCloseEvent triggered when closing the window
+        """
         # Inform parent the annotation window is closed
         if self.parent_app:
             self.parent_app.annotation_window = None

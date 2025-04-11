@@ -109,7 +109,17 @@ class HotkeyListener:
                 print("Hotkey listener stopped")
             
     def on_key_press(self, key):
-        """Handle key press events"""
+        """Handle key press events from the global keyboard listener.
+        
+        Passes the key press to the hotkey processor for detection
+        of hotkey combinations.
+        
+        Args:
+            key: The key object representing the pressed key
+            
+        Returns:
+            None
+        """
         if not self.hotkey:
             return
             
@@ -122,7 +132,17 @@ class HotkeyListener:
             pass
             
     def on_key_release(self, key):
-        """Handle key release events"""
+        """Handle key release events from the global keyboard listener.
+        
+        Passes the key release to the hotkey processor for detection
+        of completed hotkey combinations.
+        
+        Args:
+            key: The key object representing the released key
+            
+        Returns:
+            None
+        """
         if not self.hotkey:
             return
             
@@ -135,7 +155,15 @@ class HotkeyListener:
             pass
             
     def on_hotkey_activated(self):
-        """Handle hotkey activation"""
+        """Handle hotkey activation when the configured key combination is pressed.
+        
+        Triggered when the full hotkey combination has been detected.
+        Calls the callback function provided during initialization,
+        which typically initiates the screenshot capture process.
+        
+        Returns:
+            None
+        """
         print("Hotkey activated!")
         self.callback()
 
@@ -148,9 +176,26 @@ class ScreenshotUtilService(rumps.App):
     
     @classmethod
     def is_instance_running(cls):
+        """Check if an instance of the service is already running.
+        
+        Class method that returns the status of the _instance_running
+        class variable to prevent multiple instances of the service.
+        
+        Returns:
+            bool: True if an instance is already running, False otherwise
+        """
         return cls._instance_running
         
     def __init__(self):
+        """Initialize the screenshot utility service application.
+        
+        Sets up the menu bar app, loads preferences, initializes the hotkey
+        listener, and configures auto-launch if enabled. Prevents multiple
+        instances of the service from running simultaneously.
+        
+        Raises:
+            RuntimeError: If another instance of the service is already running
+        """
         # Check if another instance is already running
         if ScreenshotUtilService._instance_running:
             print("ERROR: Another instance of ScreenshotUtilService is already running!")
@@ -261,7 +306,15 @@ class ScreenshotUtilService(rumps.App):
             )
     
     def initialize_qt_app(self):
-        """Initialize the Qt application"""
+        """Initialize the Qt application for screenshot operations.
+        
+        Creates a QApplication instance if one doesn't already exist,
+        or uses the existing instance. This is needed for Qt-based
+        components like the screen capture overlay.
+        
+        Returns:
+            None. Sets self.qt_app to the QApplication instance.
+        """
         # Instead of running QApplication in a separate thread,
         # we'll create it on demand when needed for screenshot operations
         print("Initializing Qt application")
@@ -274,7 +327,19 @@ class ScreenshotUtilService(rumps.App):
         print("Qt application initialized")
     
     def on_capture_complete(self, screenshot):
-        """Handle completed screenshot capture"""
+        """Handle a completed screenshot capture operation.
+        
+        Processes the captured screenshot by saving it to a temporary file
+        and opening it with the default image viewer. Shows notification
+        of success or failure.
+        
+        Args:
+            screenshot: A PIL Image object containing the captured screenshot,
+                       or None if capture was canceled or failed
+                       
+        Returns:
+            None
+        """
         if screenshot:
             try:
                 # Add debug info about the screenshot
@@ -596,7 +661,15 @@ class ScreenshotUtilService(rumps.App):
 
 
 def run_service():
-    """Run the screenshot utility as a background service"""
+    """Run the screenshot utility as a background service.
+    
+    Main entry point for starting the screenshot utility in service mode.
+    Creates a lock file to prevent multiple instances, initializes the
+    ScreenshotUtilService class, and handles cleanup on exit.
+    
+    Returns:
+        None. Exits the process on completion or error.
+    """
     try:
         # Add a unique identifying string that we can use to detect this process later
         print("Starting Screenshot Utility service with identifier: screenshot-service-instance")
