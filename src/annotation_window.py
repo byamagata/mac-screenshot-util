@@ -114,11 +114,9 @@ class DrawingArea(QWidget):
                 height = abs(self.start_point.y() - self.current_point.y())
                 painter.drawRect(x, y, width, height)
             elif self.tool == "arrow":
-                # Draw line part of arrow
-                painter.drawLine(self.start_point, self.current_point)
-                
-                # Calculate arrow head
+                # Calculate arrow head and stem
                 arrow_length = 20
+                arrow_width = self.pen_width * 3  # Width for the stem of the arrow
                 dx = self.current_point.x() - self.start_point.x()
                 dy = self.current_point.y() - self.start_point.y()
                 
@@ -127,6 +125,10 @@ class DrawingArea(QWidget):
                 if length > 0:  # Avoid division by zero
                     dx /= length
                     dy /= length
+                    
+                    # Calculate perpendicular direction for arrow stem width
+                    perpx = -dy
+                    perpy = dx
                     
                     # Calculate arrow head points
                     p1 = QPoint(
@@ -139,9 +141,41 @@ class DrawingArea(QWidget):
                         int(self.current_point.y() - arrow_length * (dy * 0.866 + dx * 0.5))
                     )
                     
-                    # Draw arrow head
-                    painter.drawLine(self.current_point, p1)
-                    painter.drawLine(self.current_point, p2)
+                    # Calculate points for the stem
+                    stem_width = arrow_width / 2
+                    
+                    # Start points (widened to create stem)
+                    s1 = QPoint(
+                        int(self.start_point.x() + stem_width * perpx),
+                        int(self.start_point.y() + stem_width * perpy)
+                    )
+                    
+                    s2 = QPoint(
+                        int(self.start_point.x() - stem_width * perpx),
+                        int(self.start_point.y() - stem_width * perpy)
+                    )
+                    
+                    # Connection points where stem meets the arrow head
+                    c1 = QPoint(
+                        int(self.current_point.x() - arrow_length * dx + stem_width * perpx),
+                        int(self.current_point.y() - arrow_length * dy + stem_width * perpy)
+                    )
+                    
+                    c2 = QPoint(
+                        int(self.current_point.x() - arrow_length * dx - stem_width * perpx),
+                        int(self.current_point.y() - arrow_length * dy - stem_width * perpy)
+                    )
+                    
+                    # Set brush for filling
+                    painter.setBrush(QColor(self.pen_color))
+                    
+                    # Draw the stem as a polygon
+                    stem_points = [s1, c1, c2, s2]
+                    painter.drawPolygon(stem_points)
+                    
+                    # Create and fill a polygon for the arrow head
+                    head_points = [self.current_point, p1, p2]
+                    painter.drawPolygon(head_points)
     
     def mousePressEvent(self, event):
         """Handle mouse press events to start drawing"""
@@ -210,12 +244,9 @@ class DrawingArea(QWidget):
                    Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
         painter.setPen(pen)
         
-        # Draw the line
-        painter.drawLine(start_point, end_point)
-        
         # Calculate arrow head
-        angle = 0.5  # 30 degrees in radians
         arrow_length = 20
+        arrow_width = self.pen_width * 3  # Width for the stem of the arrow
         
         # Calculate direction vector
         dx = end_point.x() - start_point.x()
@@ -229,6 +260,10 @@ class DrawingArea(QWidget):
         dx /= length
         dy /= length
         
+        # Calculate perpendicular direction for arrow stem width
+        perpx = -dy
+        perpy = dx
+        
         # Calculate arrow head points
         p1 = QPoint(
             int(end_point.x() - arrow_length * (dx * 0.866 + dy * 0.5)),
@@ -240,9 +275,41 @@ class DrawingArea(QWidget):
             int(end_point.y() - arrow_length * (dy * 0.866 + dx * 0.5))
         )
         
-        # Draw arrow head
-        painter.drawLine(end_point, p1)
-        painter.drawLine(end_point, p2)
+        # Calculate points for the stem
+        stem_width = arrow_width / 2
+        
+        # Start points (widened to create stem)
+        s1 = QPoint(
+            int(start_point.x() + stem_width * perpx),
+            int(start_point.y() + stem_width * perpy)
+        )
+        
+        s2 = QPoint(
+            int(start_point.x() - stem_width * perpx),
+            int(start_point.y() - stem_width * perpy)
+        )
+        
+        # Connection points where stem meets the arrow head
+        c1 = QPoint(
+            int(end_point.x() - arrow_length * dx + stem_width * perpx),
+            int(end_point.y() - arrow_length * dy + stem_width * perpy)
+        )
+        
+        c2 = QPoint(
+            int(end_point.x() - arrow_length * dx - stem_width * perpx),
+            int(end_point.y() - arrow_length * dy - stem_width * perpy)
+        )
+        
+        # Set the brush to fill the shape
+        painter.setBrush(QColor(self.pen_color))
+        
+        # Draw the stem as a polygon
+        stem_points = [s1, c1, c2, s2]
+        painter.drawPolygon(stem_points)
+        
+        # Create and fill a polygon for the arrow head
+        head_points = [end_point, p1, p2]
+        painter.drawPolygon(head_points)
         
         self.update()
     
@@ -315,6 +382,9 @@ class AnnotationWindow(QMainWindow):
         # Setup UI
         self.setup_ui()
         
+        # Setup keyboard shortcuts
+        self.setup_shortcuts()
+        
     def setup_ui(self):
         """Set up the annotation window UI"""
         # Create central widget and layout
@@ -345,6 +415,32 @@ class AnnotationWindow(QMainWindow):
         
         # Resize window to fit screenshot with toolbar
         self.adjustSize()
+        
+    def setup_shortcuts(self):
+        """Set up keyboard shortcuts for the annotation window"""
+        # Undo shortcut (CMD+Z on macOS, Ctrl+Z on other platforms)
+        undo_shortcut = QAction("Undo", self)
+        undo_shortcut.setShortcut("Ctrl+Z")  # This works for both CMD+Z on macOS and Ctrl+Z on other platforms
+        undo_shortcut.triggered.connect(self.drawing_area.undo)
+        self.addAction(undo_shortcut)
+        
+        # Redo shortcut (CMD+Shift+Z on macOS, Ctrl+Shift+Z on other platforms)
+        redo_shortcut = QAction("Redo", self)
+        redo_shortcut.setShortcut("Ctrl+Shift+Z")  # This works for both CMD+Shift+Z on macOS and Ctrl+Shift+Z on other platforms
+        redo_shortcut.triggered.connect(self.drawing_area.redo)
+        self.addAction(redo_shortcut)
+        
+        # Copy to clipboard shortcut (CMD+C on macOS, Ctrl+C on other platforms)
+        copy_shortcut = QAction("Copy", self)
+        copy_shortcut.setShortcut("Ctrl+C")
+        copy_shortcut.triggered.connect(self.copy_to_clipboard)
+        self.addAction(copy_shortcut)
+        
+        # Save shortcut (CMD+S on macOS, Ctrl+S on other platforms)
+        save_shortcut = QAction("Save", self)
+        save_shortcut.setShortcut("Ctrl+S") 
+        save_shortcut.triggered.connect(self.save_image)
+        self.addAction(save_shortcut)
     
     def setup_toolbar(self):
         """Set up the annotation toolbar"""
