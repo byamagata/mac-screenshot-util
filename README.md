@@ -48,37 +48,33 @@ python run.py --direct-capture
 
 This mode is especially useful for testing and for when the background service calls the capture functionality.
 
-### Creating an Application Bundle
+### Creating and Distributing the Application Bundle
 
-To create a standalone macOS application (.app):
+To create a standalone macOS application (.app) that you can distribute to colleagues:
 
 ```
 python package.py
 ```
 
-This will create the app bundle in the `dist` directory. You can then move the app to your Applications folder.
+The script will:
+1. Clean up any previous packaging attempts
+2. Install required dependencies
+3. Create the application bundle in the `dist` directory
+4. Create a ZIP archive for easy distribution
+5. Display clear instructions on where to find the files
 
-### Using the Installer
+When the packaging process is complete, you'll find:
+- The application bundle at `dist/Screenshot Utility.app`
+- A distribution ZIP file at `dist/Screenshot Utility-x.x.x.zip` (where x.x.x is the version number)
 
-The Screenshot Utility comes with an installer script that helps with installation, auto-launch configuration, and uninstallation:
+You can then:
+- Move the .app to your Applications folder for personal use
+- Send the ZIP file to colleagues who can extract it and use the app
 
+Additional options:
 ```
-python installer.py
-```
-
-This will show an interactive menu with the following options:
-1. Install Application - Creates and installs the app in the Applications folder
-2. Enable Auto-Launch at Login - Sets up the app to start automatically at login
-3. Disable Auto-Launch at Login - Prevents the app from starting at login
-4. Uninstall Application - Removes the app and its preferences
-
-You can also use command-line arguments for non-interactive usage:
-
-```
-python installer.py install              # Install the app and enable auto-launch
-python installer.py uninstall            # Uninstall the app
-python installer.py enable-autostart     # Enable auto-launch at login
-python installer.py disable-autostart    # Disable auto-launch at login
+python package.py --clean    # Just clean previous builds without creating a new package
+python package.py --help     # Show help information
 ```
 
 ## Development
